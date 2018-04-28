@@ -32,3 +32,6 @@ ggplot(data1, aes(x = factor(day), y = factor(hour), fill = count)) +
   ylab("Hour of the Day") +
   ggtitle("Heatmap of Ford GoBike Day V.S. Hour") +
   theme(legend.position="none")
+
+----
+## test 
