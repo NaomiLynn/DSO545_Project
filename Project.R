@@ -138,4 +138,63 @@ monday = data_temp %>%
          start_station_name == "San Francisco Caltrain Station 2 (Townsend St at 4th St)") %>%
   mutate(available_bikes_num = 21 - outflow_count)
 
+### Andy's Codes 05/02 23:08PM
+
+### 1. Mapping out the top 10 tourist attractions and existing Ford GoBike stations at SF to identify if there're
+### potential areas to set up new stations.
+
+library(maps)
+library(ggplot2)
+library(dplyr)
+library(ggmap)
+
+
+table07 = read.csv("2017-fordgobike-tripdata.csv")
+table0801 = read.csv("201801_fordgobike_tripdata.csv")
+table0802 = read.csv("201802_fordgobike_tripdata.csv")
+table0803 = read.csv("201803_fordgobike_tripdata.csv")
+
+data = rbind(table07,table0801,table0802,table0803)
+write.csv(data, file = "ford_bike_data.csv")
+
+sf_attraction=read.csv("SF_top10_attractions.csv")
+SF_Map=qmap("San Franciso city", zoom=12)
+
+start_bike_station=data%>%
+  select(start_station_name,
+         start_station_latitude,start_station_longitude)%>%
+  group_by(start_station_name,start_station_latitude,start_station_longitude)%>%
+  summarise()
+
+end_bike_station=data%>%
+  select(end_station_name,
+         end_station_latitude,end_station_longitude)%>%
+  group_by(end_station_name,end_station_latitude,end_station_longitude)%>%
+  summarise()
+
+SF_Map+
+  geom_point(data=start_bike_station,
+             aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
+  geom_point(data=end_bike_station,
+             aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
+  geom_point(data=sf_attraction,
+             aes(x=longitude,y=latitude),size=3,color="red",shape=17)
+
+
+###
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
