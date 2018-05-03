@@ -20,6 +20,7 @@ library(ggplot2)
 data$start_time = ymd_hms(data$start_time)
 data$end_time = ymd_hms(data$end_time)
 
+# data1 is for creating the heatmap
 data1 = data%>%
   mutate(day = wday(start_time, label = T, abbr = F),
          hour = hour(start_time)) %>%
@@ -34,7 +35,7 @@ ggplot(data1, aes(x = factor(day), y = factor(hour), fill = count)) +
   ggtitle("Heatmap of Ford GoBike Rental Day V.S. Hour") +
   theme(legend.position="none")
 
-# the busiest times are at 8am and 5pm
+# Results: People rent bikes mostly at 8am and 5pm.
 
 
 ### Find the most busiest stations at 8am and 5pm on "one" weekday
@@ -90,3 +91,51 @@ mutate(outflow_count = i)
 # renters during weekdays are usually subscriber; weekends most one-time
 # -> 2 different customer segments
 #
+
+
+### Linda's Codes 05/02 20:40PM
+
+## First, create a temporary dataset, adding new columns as "outflow" and "inflow":
+data_temp = data %>%
+  mutate(day = wday(start_time, label = T, abbr = F),
+         start_hour = hour(start_time),
+         end_hour = hour(end_time),
+         outflow = 1,
+         inflow = 1)
+
+## Find out top 10 stations that are out of stock on Monday, 8am:
+
+# Step1 - count the outflow and inflow at each station, at 8am:
+data_8am = data_temp %>%
+  group_by(day, start_station_name)%>%
+  summarise(outflow_count = sum(ifelse
+                                (start_hour == 8, 
+                                  outflow, 
+                                  0)),
+            inflow_count = sum(ifelse
+                               (end_hour == 8, 
+                                 inflow, 
+                                 0))) 
+
+# Step2 - find out top 10 stations that are out of stock on Monday, 8am:
+# (Can change weekdays)
+monday_8am = data_8am %>%
+  filter(day == 'Monday') %>%
+  mutate(bikes_needed = outflow_count - inflow_count) %>%
+  select(day, start_station_name, bikes_needed) %>%
+  arrange(desc(bikes_needed)) %>%
+  slice(seq_len(10))
+
+ggplot(monday_8am, aes(reorder(x = start_station_name,-bikes_needed), y = bikes_needed)) +
+  geom_col() +
+  ggtitle("Top 10 Out of Stock Stations on Monday, 8AM") +
+  xlab("Stations") +
+  ylab("Bikes Needed")
+
+# San Francisco Caltrain Station 2: 21 bikes 
+monday = data_temp %>%
+  filter(day == "Monday", 
+         start_station_name == "San Francisco Caltrain Station 2 (Townsend St at 4th St)") %>%
+  mutate(available_bikes_num = 21 - outflow_count)
+
+
