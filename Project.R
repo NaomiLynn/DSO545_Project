@@ -138,6 +138,7 @@ monday = data_temp %>%
          start_station_name == "San Francisco Caltrain Station 2 (Townsend St at 4th St)") %>%
   mutate(available_bikes_num = 21 - outflow_count)
 
+<<<<<<< HEAD
 ### Andy's Codes 05/02 23:08PM
 
 ### 1. Mapping out the top 10 tourist attractions and existing Ford GoBike stations at SF to identify if there're
@@ -182,19 +183,3 @@ SF_Map+
 
 
 ###
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
