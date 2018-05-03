@@ -181,5 +181,4 @@ SF_Map+
   geom_point(data=sf_attraction,
              aes(x=longitude,y=latitude),size=3,color="red",shape=17)
 
-
 ###
