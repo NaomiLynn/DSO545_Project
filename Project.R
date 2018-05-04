@@ -182,3 +182,49 @@ SF_Map+
              aes(x=longitude,y=latitude),size=3,color="red",shape=17)
 
 ###
+
+library(maps)
+library(ggplot2)
+library(dplyr)
+library(ggmap)
+library(lubridate)
+
+table07 = read.csv("2017-fordgobike-tripdata.csv")
+table0801 = read.csv("201801_fordgobike_tripdata.csv")
+table0802 = read.csv("201802_fordgobike_tripdata.csv")
+table0803 = read.csv("201803_fordgobike_tripdata.csv")
+
+data = rbind(table07,table0801,table0802,table0803)
+write.csv(data, file = "ford_bike_data.csv")
+SF_Map=qmap("San Franciso city", zoom=12)
+
+### Maintenance plan
+## Plotting out the condition of the bikes by the end of the 1st quarter of 2018 by following segments:
+## 1. Usage hour > 60 hours --> Not recommend to use
+## 2. Usage hour between 40 and 60 hours --> Acceptable
+## 3. Usage hour < 40 hours --> Recommend to use
+
+data$start_time = ymd_hms(data$start_time)
+data$end_time = ymd_hms(data$end_time)
+
+bike_usage_q1=data%>%
+  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
+  select(duration_sec,bike_id)%>% 
+  group_by(bike_id)%>%
+  summarize(usage_hour=sum(duration_sec)/3600)
+
+
+bike_usage_q1=mutate(bike_usage_q1,Condition=ifelse(usage_hour>60, "Not recommend to use",
+                                                    ifelse(usage_hour>=40 & usage_hour<= 60, "Acceptable",
+                                                           ifelse(usage_hour<40, "Recommend to use","NA"))))
+
+## Chart- condition of the bikes by the end of Q1, 2018
+ggplot(bike_usage_q1,aes(Condition))+
+  geom_bar(aes(y = (..count..)/sum(..count..)))+
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25)+
+  scale_y_continuous(labels=scales::percent)+
+  labs(title = "Condition of the bikes by the end of Q1, 2018",y = "Percent", x = "Condition")
+
+## The station of the bikes that are not recommended to use
+#Pending...still thinking how to do it...
+
