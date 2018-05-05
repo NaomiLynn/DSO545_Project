@@ -226,5 +226,40 @@ ggplot(bike_usage_q1,aes(Condition))+
   labs(title = "Condition of the bikes by the end of Q1, 2018",y = "Percent", x = "Condition")
 
 ## The station of the bikes that are not recommended to use
-#Pending...still thinking how to do it...
+
+bike_usage_q1=data%>%
+  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
+  select(duration_sec,bike_id)%>% 
+  group_by(bike_id)%>%
+  summarize(usage_hour=sum(duration_sec)/3600)
+
+
+bike_usage_q1=mutate(bike_usage_q1,Condition=ifelse(usage_hour>60, "Not recommend to use",
+                                                    ifelse(usage_hour>=40 & usage_hour<= 60, "Acceptable",
+                                                           ifelse(usage_hour<40, "Recommend to use","NA"))))
+
+## Chart- condition of the bikes by the end of Q1, 2018
+ggplot(bike_usage_q1,aes(Condition))+
+  geom_bar(aes(y = (..count..)/sum(..count..)))+
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25)+
+  scale_y_continuous(labels=scales::percent)+
+  labs(title = "Condition of the bikes by the end of Q1, 2018",y = "Percent", x = "Condition")
+
+## The station of the bikes that are not recommended to use
+
+bike_not_rec=bike_usage_q1%>%
+  select(bike_id,Condition)%>%
+  filter(Condition=="Not recommend to use")
+
+bike_not_rec_detail=merge(bike_not_rec,data,by="bike_id")%>%
+  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
+  group_by(bike_id)%>%
+  select(bike_id,Condition,end_time,end_station_name,end_station_latitude,end_station_longitude)%>%
+  arrange(bike_id,desc(end_time))%>%
+  do(slice(., 1))
+
+SF_Map+
+  geom_point(data=start_bike_station,aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
+  geom_point(data=end_bike_station,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
+  geom_point(data=bike_not_rec_detail,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="red")
 
