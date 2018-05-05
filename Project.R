@@ -38,59 +38,6 @@ ggplot(data1, aes(x = factor(day), y = factor(hour), fill = count)) +
 # Results: People rent bikes mostly at 8am and 5pm.
 
 
-### Find the most busiest stations at 8am and 5pm on "one" weekday
-### Cautious: must divided by the number of days to find the average delta of a station at 8am of 1 weekday
-
-## find out 
-
-weekday_8am_int = data %>%
-  mutate(day = wday(start_time, label = T, abbr = F),
-         start_hour = hour(start_time),
-         end_hour = hour(end_time),
-         outflow = 1,
-         inflow = 1,
-         hour = 8) %>% # create outflow/inflow to calculate delta (=inflow-outflow) of a station 
-  filter(start_hour == 8| end_hour == 8, # keep only start or end at 8am
-         day %in% c("Monday", "Tuesday", "Wednesday",
-                    "Thursday", "Friday")) %>%
-  select(day, start_hour, end_hour, hour, start_station_name, end_station_name, outflow, inflow)
-# intentionally creating this intermediate dataframe to double check
-
-
-weekday_8am = weekday_8am_int %>%
-  group_by(day, hour, start_station_name, end_station_name) %>%
-  summarise(outflow_count = sum(ifelse
-                                (start_hour == 8, 
-                                  outflow, 
-                                  0)),
-            inflow_count = sum(ifelse
-                               (end_hour == 8, 
-                                 inflow, 
-                                 0))) 
-
-# %>%
-#  mutate(delta = inflow_count - outflow_count)
-
-weekday_8am$delta = weekday_8am$inflow_count - weekday_8am$outflow_count
-
-weekday_8am = weekday_8am %>%
-  group_by(day, hour, start_station_name) %>%
-  summarize(delta = sum(delta)) %>%
-  arrange(delta) 
-# checked : highest delta  happens on Wednesday, s
-# 1) San Francisco Ferry Building (Harry Bridges Plaza), Wednesday 
-# 2) San Francisco Caltrain Station 2 (Townsend St at 4th St), Wednesday
-# 3) Berry St at 4th St, Tuesday
-
-
-
-
-mutate(outflow_count = i)
-
-############### new ideas ##############
-# renters during weekdays are usually subscriber; weekends most one-time
-# -> 2 different customer segments
-#
 
 
 ### Linda's Codes 05/02 20:40PM
@@ -210,3 +157,202 @@ SF_Map+
   geom_point(data=end_bike_station,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
   geom_point(data=bike_not_rec_detail,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="red")
 
+
+
+### Jack's code ###
+
+
+### 2. Find the stations most likely to be out of stock at 8am or 5pm on 1 weekday
+# Cautious: must divide by the number of weeks of this dataframe
+# to find the average delta (bike inflow - bike outflow) of a station at 8am of 1 weekday
+
+
+## find out how many weeks from 2017/01/01 to 2018/03/31 the timeframe of this dataframe
+start_date = min(data$start_time)
+# start_date = 2017-06-28
+end_date = max(data$start_time)
+# end_date = 2018-03-31
+
+myDates = seq(from = start_date, to = end_date, by = "days")
+number_of_weeks = length(which(wday(myDates, label = TRUE)=="Wed"))
+number_of_weeks
+# There are 40 Wednesdays (or say 40 weeks) in our dataframe
+# 39 Mondays, but doesn't impact our analysis much
+
+
+## create an intermediate dataframe to calculate delta  (=inflow-outflow) 
+## of a station at 8am
+# create new columns "inflow" and "outflow" and assign 1 for futher calculation
+
+weekday_8am_int = data %>%
+  mutate(day = wday(start_time, label = T, abbr = F),
+         start_hour = hour(start_time),
+         end_hour = hour(end_time),
+         outflow = 1,
+         inflow = 1,
+         hour = 8) %>% # create outflow/inflow to calculate delta (=inflow-outflow) of a station 
+  filter(start_hour == 8| end_hour == 8, # keep only start or end at 8am
+         day %in% c("Monday", "Tuesday", "Wednesday",
+                    "Thursday", "Friday")) %>%
+  select(day, start_hour, end_hour, hour, start_station_name, end_station_name, outflow, inflow)
+# intentionally stops at this intermediate dataframe to double check
+
+
+## create aggregated delta of each station at 8am
+weekday_8am_int2 = weekday_8am_int %>%
+  group_by(day, hour, start_station_name, end_station_name) %>%
+  summarise(outflow_count = sum(ifelse
+                                (start_hour == 8, 
+                                  outflow, 
+                                  0)),
+            inflow_count = sum(ifelse
+                               (end_hour == 8, 
+                                 inflow, 
+                                 0))) # %>% 
+# mutate(delta = inflow_count - outflow_count)
+
+# not sure why mutate doesn't work here, so just seperate the code here
+weekday_8am_int2$delta = weekday_8am_int2$inflow_count - weekday_8am_int2$outflow_count
+
+weekday_8am = weekday_8am_int2 %>%
+  group_by(day, hour, start_station_name) %>%
+  summarize(rental = sum(outflow_count)/number_of_weeks,
+            return = sum(inflow_count)/number_of_weeks,
+            delta = sum(delta)/number_of_weeks)%>%
+  arrange(delta) 
+# checked : highest delta mostly happens on Wednesday
+# 1) San Francisco Ferry Building (Harry Bridges Plaza), Wednesday 
+# 2) San Francisco Caltrain Station 2 (Townsend St at 4th St), Wednesday
+# 3) Berry St at 4th St, Tuesday
+# 4) Steuart St at Market St, Monday
+# 5) Howard St at Beale St, Monday
+
+
+## plot the top5 most likely out of bikes stations
+weekday_8am %>%
+  group_by(start_station_name) %>%
+  summarize(delta = min(delta)) %>%
+  arrange(delta) %>%
+  slice(1:5) %>%
+  ggplot(aes(x= reorder(start_station_name,-delta) , y= -delta )) +
+  geom_col(fill = c("darkblue")) +
+  coord_flip() + 
+  ggtitle("Top5 stations most likely to be short of bikes at 8am on a weekday") +
+  xlab("") + 
+  ylab("The number of bikes (average within 2017/06 - 2018/03)") + 
+  theme_bw() + # theme_xxx can select different color background 
+  geom_text( aes(label= paste(round(-delta, digits=1))),
+             position = 'dodge',
+             hjust = +1.5,
+             color = 'white')
+
+
+## plot the top5 most rental stations  
+weekday_8am %>%
+  group_by(start_station_name) %>%
+  summarize(rental = max(rental)) %>%
+  arrange(desc(rental)) %>%
+  slice(1:5) %>%
+  ggplot(aes(x= reorder(start_station_name, rental) , y= rental )) +
+  geom_col(fill = c("darkblue")) +
+  coord_flip() + 
+  ggtitle("Top5 stations that has most rental at 8am on a weekday") +
+  xlab("") + 
+  ylab("The number of bikes (average within 2017/06 - 2018/03)") +
+  theme_bw() + # theme_xxx can select different color background 
+  geom_text(aes(label= paste(round(rental, digits=1))),
+            position = 'dodge',
+            hjust = +1.5,
+            color = 'white')
+
+
+
+## plot the top5 most return stations  
+weekday_8am %>%
+  group_by(start_station_name) %>%
+  summarize(return = max(return)) %>%
+  arrange(desc(return)) %>%
+  slice(1:5) %>%
+  ggplot(aes(x= reorder(start_station_name, return) , y= return )) +
+  geom_col(fill = c("darkblue")) +
+  coord_flip() + 
+  ggtitle("Top5 stations that has most return at 8am on a weekday") +
+  xlab("") + 
+  ylab("The number of bikes (average within 2017/06 - 2018/03)") +
+  theme_bw() + # theme_xxx can select different color background 
+  geom_text(aes(label= paste(round(return, digits=1))),
+            position = 'dodge',
+            hjust = +1.5,
+            color = 'white')
+
+
+## what can be further worked on in #2
+## find out the peak month and only analyze within that month 
+## to avoid average out due to low-demand season (perhaps winter)
+
+
+
+### 6. Revenue Management and Seasonality
+### Goal: find out/compare the number of bikes needed in summer, fall, and winnter
+
+# Based on the previous heat map, the peak utlization happens on weekday (Wednesday)
+# around 8am (7am-9am) or 5pm (4pm-6pm).
+# Therefore, we focus on the comparing utlization of different seasons
+# on Wednesday around 8am (7am-9am).
+# Assumption: We use the number of different bikes that are rented within this time period to
+# represent the number of bikes needed of different seasons.
+# Because the data don't have full month of June, 2017, we define summer = July~Sep,
+# fall = Oct~Dec, spring = Jan~Mar. The season definition also seems to be more appropriate
+# based on SF's temperature and percipitation.
+
+
+## find out the number of Wednesdays in summer, fall, winter
+## to do average 
+summer_start = ymd("2017-07-01")
+summer_end = ymd("2017-09-30")
+fall_start = ymd("2017-10-01")
+fall_end = ymd("2017-12-31")
+winter_start = ymd("2018-01-01")
+winter_end = ymd("2018-03-31")
+
+summer_du = seq(from = summer_start, to = summer_end, by = "days")
+num_weeks_summer = length(which(wday(summer_du, label = TRUE)=="Wed"))
+fall_du = seq(from = fall_start, to = fall_end, by = "days")
+num_weeks_fall = length(which(wday(fall_du, label = TRUE)=="Wed"))
+winter_du = seq(from = winter_start, to = winter_end, by = "days")
+num_weeks_winter = length(which(wday(winter_du, label = TRUE)=="Wed"))
+
+library(tidyr)
+
+## Find out the total program utilization ride (total bike ride time) across seaons
+
+season_ride = season_int = data %>%
+  mutate(month = month(start_time)) %>% 
+  mutate(season = ifelse(month >=7 & month <=9,
+                         "summer",
+                         ifelse(month >=10 & month <=12,
+                                "fall",
+                                "winter")))  %>% 
+  group_by(season, user_type) %>%
+  summarise(ride_time = sum(duration_sec)) %>%
+  spread(key = user_type, value = ride_time) %>%
+  mutate(Total = Customer + Subscriber) %>%
+  gather(Customer:Total , key = "user_type", value = "ride_time")
+
+
+season_ride$season = factor(season_ride$season)
+lev = levels(season_ride$season)
+lev = lev[c(2,1,3)]
+season_ride$season = factor(season_ride$season, levels = lev)
+
+ggplot(season_ride,aes(season, y = (ride_time/(60*60)), 
+                       group=user_type,
+                       col = user_type)) +
+  geom_line() + 
+  xlab("") +
+  ylab("Total bike usage time") +
+  ggtitle("Bike usage time by seasons and user types") +
+  scale_y_continuous(name = "Bike usage hours (000's)",
+                     breaks = seq(30000, 80000, by=10000), # notice that breaks still at the actual value
+                     label = seq(30, 80, by=10)) +
+  theme_bw()
