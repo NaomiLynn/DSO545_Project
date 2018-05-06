@@ -161,8 +161,8 @@ SF_Map+
 
 ### Jack's code ###
 
-
-### 2. Find the stations most likely to be out of stock at 8am or 5pm on 1 weekday
+### 1.2 Potential Out-of-stock Stations ###
+### Find the stations most likely to be out of stock at 8am or 5pm on 1 weekday
 # Cautious: must divide by the number of weeks of this dataframe
 # to find the average delta (bike inflow - bike outflow) of a station at 8am of 1 weekday
 
@@ -292,13 +292,9 @@ weekday_8am %>%
 
 
 
-### 6. Revenue Management and Seasonality
-### Goal: find out/compare the number of bikes needed in summer, fall, and winnter
+### 5.1.5 Program Utilization along the past three quarters ###
+### Goal: find out program usage in summer, fall, and winnter
 
-# Based on the previous heat map, the peak utlization happens on weekday (Wednesday)
-# around 8am (7am-9am) or 5pm (4pm-6pm).
-# Therefore, we focus on the comparing utlization of different seasons
-# on Wednesday around 8am (7am-9am).
 # Assumption: We use the number of different bikes that are rented within this time period to
 # represent the number of bikes needed of different seasons.
 # Because the data don't have full month of June, 2017, we define summer = July~Sep,
@@ -326,7 +322,7 @@ library(tidyr)
 
 ## Find out the total program utilization ride (total bike ride time) across seaons
 
-season_ride = season_int = data %>%
+season_ride = data %>%
   mutate(month = month(start_time)) %>% 
   mutate(season = ifelse(month >=7 & month <=9,
                          "summer",
@@ -339,12 +335,13 @@ season_ride = season_int = data %>%
   mutate(Total = Customer + Subscriber) %>%
   gather(Customer:Total , key = "user_type", value = "ride_time")
 
-
+# change the order of seaons to summer, fall, winter for plotting purpose
 season_ride$season = factor(season_ride$season)
 lev = levels(season_ride$season)
 lev = lev[c(2,1,3)]
 season_ride$season = factor(season_ride$season, levels = lev)
 
+# line plot of bike usage time by seasons and user types
 ggplot(season_ride,aes(season, y = (ride_time/(60*60)), 
                        group=user_type,
                        col = user_type)) +
@@ -356,3 +353,95 @@ ggplot(season_ride,aes(season, y = (ride_time/(60*60)),
                      breaks = seq(30000, 80000, by=10000), # notice that breaks still at the actual value
                      label = seq(30, 80, by=10)) +
   theme_bw()
+
+
+
+## Bike usage hours can be further broken down to (# of rentals) x (avg ride time/rental)
+## This breakdown can allow us to under the driver of the trend and the real reasons
+
+season_ride_bd = data %>%
+  mutate(month = month(start_time)) %>% 
+  mutate(season = ifelse(month >=7 & month <=9,
+                         "summer",
+                         ifelse(month >=10 & month <=12,
+                                "fall",
+                                "winter")))  %>% 
+  group_by(season, user_type) %>%
+  summarise(ride_time = sum(duration_sec) , num_of_rentals = n()) %>%
+  mutate(avg_ride_time = ride_time/num_of_rentals)
+
+## plot number of rentals in each season
+
+season_ride_bd_num = season_ride_bd %>%
+  select(season, user_type, num_of_rentals) %>%
+  spread(key = user_type, value = num_of_rentals) %>%
+  mutate(Total = Customer + Subscriber) %>%
+  gather(Customer:Total , key = "user_type", value = "num_of_rentals") 
+
+# change the order of seaons to summer, fall, winter for plotting purpose
+season_ride_bd_num$season = factor(season_ride_bd_num$season)
+lev_bd = levels(season_ride_bd_num$season)
+lev_bd = lev_bd[c(2,1,3)]
+season_ride_bd_num$season = factor(season_ride_bd_num$season, levels = lev_bd)
+
+ggplot(season_ride_bd_num, aes(season, y = num_of_rentals, 
+                         group=user_type,
+                         col = user_type)) +
+  geom_line() + 
+  xlab("") +
+  ylab("Number of bike rentals") +
+  ggtitle("Number of bike rentals by seasons and user types") +
+  scale_y_continuous(name = "Number of bike rentals (000's)",
+                     breaks = seq(50000, 300000, by=50000), 
+                     label = seq(50, 300, by=50)) +
+  theme_bw()
+
+
+
+## plot avg ride time per rental in each season
+
+season_avg_time = season_ride_bd %>%
+  select(season, user_type, avg_ride_time)%>%
+  spread(key = user_type, value = avg_ride_time)%>%
+  gather(Customer:Subscriber , key = "user_type", value = "avg_ride_time") 
+
+# create a "Total" user avg ride time directly from raw data
+# then stack to the dataframe season_avg_time
+
+season_avg_time_total = data %>%
+  mutate(month = month(start_time)) %>% 
+  mutate(season = ifelse(month >=7 & month <=9,
+                         "summer",
+                         ifelse(month >=10 & month <=12,
+                                "fall",
+                                "winter")),
+         user_type = "Total")  %>% 
+  group_by(season, user_type) %>%
+  summarise(ride_time = sum(duration_sec) , num_of_rentals = n()) %>%
+  mutate(avg_ride_time = ride_time/num_of_rentals) %>%
+  select(season, user_type, avg_ride_time)
+
+season_avg_time_total$season = factor(season_avg_time_total$season)
+
+# stack 2 tables together
+
+season_avg_time = rbind(season_avg_time ,season_avg_time_total)
+
+# change the order of seaons to summer, fall, winter for plotting purpose
+season_avg_time$season = factor(season_avg_time$season)
+lev_time = levels(season_avg_time$season)
+lev_time = lev_time[c(2,1,3)]
+season_avg_time$season = factor(season_avg_time$season, levels = lev_time)
+season_avg_time$user_type = factor(season_avg_time$user_type)
+
+# finally plot the avg ride time per rental in each season
+ggplot(season_avg_time, aes(season, y = avg_ride_time/60, 
+                               group=user_type,
+                               col = user_type)) +
+  geom_line() + 
+  xlab("") +
+  ylab("Ride time (min)") +
+  ggtitle("Average ride time per rental by seasons and user types") +
+  theme_bw()
+
+
