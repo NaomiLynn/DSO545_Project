@@ -21,7 +21,7 @@ data$start_time = ymd_hms(data$start_time)
 data$end_time = ymd_hms(data$end_time)
 
 # data1 is for creating the heatmap
-data1 = data%>%
+data1 = data %>%
   mutate(day = wday(start_time, label = T, abbr = F),
          hour = hour(start_time)) %>%
   group_by(day, hour) %>%
@@ -161,7 +161,7 @@ SF_Map+
 
 ### Jack's code ###
 
-### 1.2 Potential Out-of-stock Stations ###
+### 5.1.2 Potential Out-of-stock Stations ###
 ### Find the stations most likely to be out of stock at 8am or 5pm on 1 weekday
 # Cautious: must divide by the number of weeks of this dataframe
 # to find the average delta (bike inflow - bike outflow) of a station at 8am of 1 weekday
@@ -293,12 +293,10 @@ weekday_8am %>%
 
 
 ### 5.1.5 Program Utilization along the past three quarters ###
-### Goal: find out program usage in summer, fall, and winnter
+### Goal: find out program usage in summer, fall, and winter
 
-# Assumption: We use the number of different bikes that are rented within this time period to
-# represent the number of bikes needed of different seasons.
-# Because the data don't have full month of June, 2017, we define summer = July~Sep,
-# fall = Oct~Dec, spring = Jan~Mar. The season definition also seems to be more appropriate
+# Because the data don't have full month of June, 2017, we define Summer = July~Sep,
+# Fall = Oct~Dec, Winter = Jan~Mar. The season definition also seems to be more appropriate
 # based on SF's temperature and percipitation.
 
 
@@ -348,11 +346,12 @@ ggplot(season_ride,aes(season, y = (ride_time/(60*60)),
   geom_line() + 
   xlab("") +
   ylab("Total bike usage time") +
-  ggtitle("Bike usage time by seasons and user types") +
+  ggtitle("Bike usage time by season and user type") +
   scale_y_continuous(name = "Bike usage hours (000's)",
                      breaks = seq(30000, 80000, by=10000), # notice that breaks still at the actual value
                      label = seq(30, 80, by=10)) +
-  theme_bw()
+  theme_bw() +
+  scale_x_discrete(label = c("Summer,2017", "Fall,2017", "Winter,2018"))
 
 
 
@@ -390,11 +389,12 @@ ggplot(season_ride_bd_num, aes(season, y = num_of_rentals,
   geom_line() + 
   xlab("") +
   ylab("Number of bike rentals") +
-  ggtitle("Number of bike rentals by seasons and user types") +
+  ggtitle("Number of bike rentals by season and user type") +
   scale_y_continuous(name = "Number of bike rentals (000's)",
                      breaks = seq(50000, 300000, by=50000), 
                      label = seq(50, 300, by=50)) +
-  theme_bw()
+  theme_bw() +
+  scale_x_discrete(label = c("Summer,2017", "Fall,2017", "Winter,2018"))
 
 
 
@@ -441,7 +441,9 @@ ggplot(season_avg_time, aes(season, y = avg_ride_time/60,
   geom_line() + 
   xlab("") +
   ylab("Ride time (min)") +
-  ggtitle("Average ride time per rental by seasons and user types") +
-  theme_bw()
+  ggtitle("Average ride time per rental by season and user type") +
+  theme_bw() +
+  scale_x_discrete(label = c("Summer,2017", "Fall,2017", "Winter,2018"))
+
 
 
