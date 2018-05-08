@@ -10,18 +10,19 @@ data = rbind(table07,table0801,table0802,table0803)
 # save file to .csv
 write.csv(data, file = "ford_bike_data.csv")
 
-
 ### Heatmap to see the busiest time 
 
 library(lubridate)
 library(dplyr)
 library(ggplot2)
 
+## Type Conversion 
+
 data$start_time = ymd_hms(data$start_time)
 data$end_time = ymd_hms(data$end_time)
 
 # data1 is for creating the heatmap
-data1 = data %>%
+data1 = data%>%
   mutate(day = wday(start_time, label = T, abbr = F),
          hour = hour(start_time)) %>%
   group_by(day, hour) %>%
@@ -29,7 +30,7 @@ data1 = data %>%
 
 ggplot(data1, aes(x = factor(day), y = factor(hour), fill = count)) +
   geom_tile() +
-  scale_fill_gradient(low = "white", high = "darkblue") +
+  scale_fill_gradient(low = "white", high = "blue") +
   xlab("") +
   ylab("Hour of the Day") +
   ggtitle("Heatmap of Ford GoBike Rental Day V.S. Hour") +
@@ -37,10 +38,47 @@ ggplot(data1, aes(x = factor(day), y = factor(hour), fill = count)) +
 
 # Results: People rent bikes mostly at 8am and 5pm.
 
+### Find the most busiest stations at 8am and 5pm on "one" weekday
+### Cautious: must divided by the number of days to find the average delta of a station at 8am of 1 weekday
+
+weekday_8am_int = data %>%
+  mutate(day = wday(start_time, label = T, abbr = F),
+         start_hour = hour(start_time),
+         end_hour = hour(end_time),
+         outflow = 1,
+         inflow = 1,
+         hour = 8) %>% # create outflow/inflow to calculate delta (=inflow-outflow) of a station 
+  filter(start_hour == 8| end_hour == 8, # keep only start or end at 8am
+         day %in% c("Monday", "Tuesday", "Wednesday",
+                    "Thursday", "Friday")) %>%
+  select(day, start_hour, end_hour, hour, start_station_name, end_station_name, outflow, inflow)
+# intentionally creating this intermediate dataframe to double check
 
 
+weekday_8am = weekday_8am_int %>%
+  group_by(day, hour, start_station_name, end_station_name) %>%
+  summarise(outflow_count = sum(ifelse
+                                (start_hour == 8, 
+                                  outflow, 
+                                  0)),
+            inflow_count = sum(ifelse
+                               (end_hour == 8, 
+                                 inflow, 
+                                 0))) 
 
-### Linda's Codes 05/02 20:40PM
+# %>%
+#  mutate(delta = inflow_count - outflow_count)
+
+weekday_8am$delta = weekday_8am$inflow_count - weekday_8am$outflow_count
+
+weekday_8am = weekday_8am %>%
+  group_by(day, hour, start_station_name) %>%
+  summarize(delta = sum(delta)) %>%
+  arrange(delta) 
+# checked : highest delta  happens on Wednesday, s
+# 1) San Francisco Ferry Building (Harry Bridges Plaza), Wednesday 
+# 2) San Francisco Caltrain Station 2 (Townsend St at 4th St), Wednesday
+# 3) Berry St at 4th St, Tuesday
 
 ## First, create a temporary dataset, adding new columns as "outflow" and "inflow":
 data_temp = data %>%
@@ -79,88 +117,81 @@ ggplot(monday_8am, aes(reorder(x = start_station_name,-bikes_needed), y = bikes_
   xlab("Stations") +
   ylab("Bikes Needed")
 
-# San Francisco Caltrain Station 2: 21 bikes 
-monday = data_temp %>%
-  filter(day == "Monday", 
-         start_station_name == "San Francisco Caltrain Station 2 (Townsend St at 4th St)") %>%
-  mutate(available_bikes_num = 21 - outflow_count)
+## Analyze the inflow and outflow of a particular station, 
+## finding out which stations often run out of stock, which stations are often with sufficient docks
+## Insights: Bikes storage resetting each month
+## Range: a month (take 18/03 as an example)
 
+# Manipulate data:
+table0803$start_time = ymd_hms(table0803$start_time)
+table0803$end_time = ymd_hms(table0803$end_time)
 
-### Andy's Codes 05/02 23:08PM
+# Outflow rank by stations:
+table0803_outflow = table0803 %>%
+  mutate(day = wday(start_time, label = T, abbr = F),
+         start_hour = hour(start_time),
+         end_hour = hour(end_time),
+         outflow = 1,
+         inflow = 1) %>%
+  group_by(start_station_name) %>%
+  mutate(outflow_count = n()) %>%
+  select(start_station_name, outflow_count, start_station_latitude, start_station_longitude) %>%
+  arrange(desc(outflow_count)) %>%
+  distinct() 
 
-### 1. Mapping out the top 10 tourist attractions and existing Ford GoBike stations at SF to identify if there're
-### potential areas to set up new stations.
+# Select the top 10 outflow stations 
+table0803_outflow_top10 = head(table0803_outflow, 10)
 
-library(maps)
-library(ggmap)
+ggplot(table0803_outflow_top10, aes(x = reorder(start_station_name, outflow_count), 
+                                    y = outflow_count)) +
+  geom_col(fill = c("darkblue")) +
+  ggtitle("Top 10 Stations with Most Bike Rentals (Outflow) March, 2018") +
+  xlab("Stations") +
+  ylab("Bike Rentals (Outflow)") +
+  theme_bw() +
+  coord_flip() +
+  geom_text(aes(label= outflow_count),
+            position = 'dodge',
+            hjust = +1.5,
+            color = 'white')
 
-sf_attraction=read.csv("SF_top10_attractions.csv")
-SF_Map=qmap("San Franciso city", zoom=12)
+# Select the top 10 inflow stations 
+# Inflow rank by stations:
+table0803_inflow = table0803 %>%
+  mutate(day = wday(start_time, label = T, abbr = F),
+         start_hour = hour(start_time),
+         end_hour = hour(end_time),
+         outflow = 1,
+         inflow = 1) %>%
+  group_by(end_station_name) %>%
+  mutate(inflow_count = n()) %>%
+  select(end_station_name, inflow_count, end_station_latitude, end_station_longitude) %>%
+  arrange(desc(inflow_count)) %>%
+  distinct() 
 
-start_bike_station=data%>%
-  select(start_station_name,
-         start_station_latitude,start_station_longitude)%>%
-  group_by(start_station_name,start_station_latitude,start_station_longitude)%>%
-  summarise()
+table0803_inflow_top10 = head(table0803_inflow, 10)
 
-end_bike_station=data%>%
-  select(end_station_name,
-         end_station_latitude,end_station_longitude)%>%
-  group_by(end_station_name,end_station_latitude,end_station_longitude)%>%
-  summarise()
+ggplot(table0803_inflow_top10, aes(x = reorder(end_station_name, inflow_count), 
+                                    y = inflow_count)) +
+  geom_col(fill = c("darkblue")) +
+  ggtitle("Top 10 Stations with Most Bike Returns (Inflow) March, 2018") +
+  xlab("Stations") +
+  ylab("Bike Returns (Inflow)") +
+  theme_bw() +
+  coord_flip() +
+  geom_text(aes(label= inflow_count),
+          position = 'dodge',
+          hjust = +1.5,
+          color = 'white')
 
-SF_Map+
-  geom_point(data=start_bike_station,
-             aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
-  geom_point(data=end_bike_station,
-             aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
-  geom_point(data=sf_attraction,
-             aes(x=longitude,y=latitude),size=3,color="red",shape=17)
-
-### Maintenance plan
-## Plotting out the condition of the bikes by the end of the 1st quarter of 2018 by following segments:
-## 1. Usage hour > 60 hours --> Not recommend to use
-## 2. Usage hour between 40 and 60 hours --> Acceptable
-## 3. Usage hour < 40 hours --> Recommend to use
-
-bike_usage_q1=data%>%
-  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
-  select(duration_sec,bike_id)%>% 
-  group_by(bike_id)%>%
-  summarize(usage_hour=sum(duration_sec)/3600)%>%
-  mutate(Condition=ifelse(usage_hour>60, "Not recommend to use",
-                                                    ifelse(usage_hour>=40 & usage_hour<= 60, "Acceptable",
-                                                           ifelse(usage_hour<40, "Recommend to use","NA"))))
-
-## List of bikes' condition by the end of Q1, 2018
-ggplot(bike_usage_q1,aes(Condition))+
-  geom_bar(aes(y = (..count..)/sum(..count..)))+
-  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25)+
-  scale_y_continuous(labels=scales::percent)+
-  labs(title = "Condition of the bikes by the end of Q1, 2018",y = "Percent", x = "Condition")
-
-## Where're the bikes that are not recommended to use located?
-
-bike_not_rec=bike_usage_q1%>%
-  select(bike_id,Condition)%>%
-  filter(Condition=="Not recommend to use")
-
-bike_not_rec_detail=merge(bike_not_rec,data,by="bike_id")%>%
-  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
-  group_by(bike_id)%>%
-  select(bike_id,Condition,end_time,end_station_name,end_station_latitude,end_station_longitude)%>%
-  arrange(bike_id,desc(end_time))%>%
-  do(slice(., 1))
+### Map the Inflows and Outflows
+SF_Map=qmap("San Franciso city", zoom=14)
 
 SF_Map+
-  geom_point(data=start_bike_station,aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
-  geom_point(data=end_bike_station,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
-  geom_point(data=bike_not_rec_detail,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="red")
-
-
-
-### Jack's code ###
-
+  geom_point(data=table0803_outflow_top10,aes(x=start_station_longitude,y=start_station_latitude),size=3,color="black")+
+  geom_point(data=table0803_inflow_top10,aes(x=end_station_longitude,y=end_station_latitude),size=3,color="red") +
+  ggtitle("Top10 Inflow and Outflow Stations") 
+  
 ### 5.1.2 Potential Out-of-stock Stations ###
 ### Find the stations most likely to be out of stock at 8am or 5pm on 1 weekday
 # Cautious: must divide by the number of weeks of this dataframe
@@ -384,8 +415,8 @@ lev_bd = lev_bd[c(2,1,3)]
 season_ride_bd_num$season = factor(season_ride_bd_num$season, levels = lev_bd)
 
 ggplot(season_ride_bd_num, aes(season, y = num_of_rentals, 
-                         group=user_type,
-                         col = user_type)) +
+                               group=user_type,
+                               col = user_type)) +
   geom_line() + 
   xlab("") +
   ylab("Number of bike rentals") +
@@ -436,14 +467,181 @@ season_avg_time$user_type = factor(season_avg_time$user_type)
 
 # finally plot the avg ride time per rental in each season
 ggplot(season_avg_time, aes(season, y = avg_ride_time/60, 
-                               group=user_type,
-                               col = user_type)) +
+                            group=user_type,
+                            col = user_type)) +
   geom_line() + 
   xlab("") +
   ylab("Ride time (min)") +
   ggtitle("Average ride time per rental by season and user type") +
   theme_bw() +
   scale_x_discrete(label = c("Summer,2017", "Fall,2017", "Winter,2018"))
+
+### 1. Mapping out the top 10 tourist attractions and existing Ford GoBike stations at SF to identify if there're
+### potential areas to set up new stations.
+
+library(maps)
+library(ggplot2)
+library(dplyr)
+library(ggmap)
+
+data = rbind(table07,table0801,table0802,table0803)
+write.csv(data, file = "ford_bike_data.csv")
+
+sf_attraction=read.csv("SF_top10_attractions.csv")
+SF_Map=qmap("San Franciso city", zoom=12)
+
+start_bike_station=data%>%
+  select(start_station_name,
+         start_station_latitude,start_station_longitude)%>%
+  group_by(start_station_name,start_station_latitude,start_station_longitude)%>%
+  summarise()
+
+end_bike_station=data%>%
+  select(end_station_name,
+         end_station_latitude,end_station_longitude)%>%
+  group_by(end_station_name,end_station_latitude,end_station_longitude)%>%
+  summarise()
+
+SF_Map+
+  geom_point(data=start_bike_station,
+             aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
+  geom_point(data=end_bike_station,
+             aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
+  geom_point(data=sf_attraction,
+             aes(x=longitude,y=latitude),size=3,color="red",shape=17)
+
+## Plotting out the condition of the bikes by the end of the 1st quarter of 2018 by following segments:
+## 1. Usage hour > 60 hours --> Not recommend to use
+## 2. Usage hour between 40 and 60 hours --> Acceptable
+## 3. Usage hour < 40 hours --> Recommend to use
+
+bike_usage_q1=data%>%
+  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
+  select(duration_sec,bike_id)%>% 
+  group_by(bike_id)%>%
+  summarize(usage_hour=sum(duration_sec)/3600)%>%
+  mutate(Condition=ifelse(usage_hour>60, "Not recommend to use",
+                          ifelse(usage_hour>=40 & usage_hour<= 60, "Acceptable",
+                                 ifelse(usage_hour<40, "Recommend to use","NA"))))
+
+## List of bikes' condition by the end of Q1, 2018
+ggplot(bike_usage_q1,aes(Condition))+
+  geom_bar(aes(y = (..count..)/sum(..count..)))+
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25)+
+  scale_y_continuous(labels=scales::percent)+
+  labs(title = "Condition of the bikes by the end of Q1, 2018",y = "Percent", x = "Condition")
+
+## Where're the bikes that are not recommended to use located?
+
+bike_not_rec=bike_usage_q1%>%
+  select(bike_id,Condition)%>%
+  filter(Condition=="Not recommend to use")
+
+bike_not_rec_detail=merge(bike_not_rec,data,by="bike_id")%>%
+  filter(end_time>="2018-01-01" & end_time<="2018-03-31")%>%
+  group_by(bike_id)%>%
+  select(bike_id,Condition,end_time,end_station_name,end_station_latitude,end_station_longitude)%>%
+  arrange(bike_id,desc(end_time))%>%
+  do(slice(., 1))
+
+SF_Map+
+  geom_point(data=start_bike_station,aes(x=start_station_longitude,y=start_station_latitude),size=1,color="black")+
+  geom_point(data=end_bike_station,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="black")+
+  geom_point(data=bike_not_rec_detail,aes(x=end_station_longitude,y=end_station_latitude),size=1,color="red")
+
+
+### Customer Analysis
+## percentage of Customer vs Subsriber
+new_data = data %>%
+  group_by(user_type) %>%
+  mutate(count = n()) %>%
+  select(user_type, count) %>%
+  distinct() 
+
+ggplot(new_data, aes(x = user_type, y = count)) +
+  geom_bar(stat = "identity", fill = c('darkblue')) +
+  geom_text(aes(label = sprintf("%.2f%%", count/sum(count) * 100)), 
+            vjust = -.3) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle("User Type Analysis: Customer v.s. Subscriber") +
+  xlab("User type") +
+  ylab("Count") +
+  theme_bw()
+
+# gender analysis under Customer (including replacing missing value with NA)
+customer = data %>%
+  filter(user_type == "Customer")
+customer$member_gender[customer$member_gender == ''] = NA
+
+new_customer = customer %>%
+  group_by(member_gender) %>%
+  mutate(count=n()) %>%
+  select(member_gender,count) %>%
+  distinct()
+
+ggplot(new_customer,aes(x=member_gender,y=count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.2f%%", count/sum(count) * 100)), 
+            vjust = -.3) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle("Gender analysis under Customer") +
+  xlab("Gender") +
+  ylab("Count")
+
+# gender analysis under Subscriber (including replacing missing value with NA)
+subscriber = data %>%
+  filter(user_type == "Subscriber")
+subscriber$member_gender[subscriber$member_gender == ''] = NA
+
+new_subscriber = subscriber %>%
+  group_by(member_gender) %>%
+  mutate(count=n()) %>%
+  select(member_gender,count) %>%
+  distinct()
+
+ggplot(new_subscriber,aes(x=member_gender,y=count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.2f%%", count/sum(count) * 100)), 
+            vjust = -.3) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle("Gender analysis under Subscriber") +
+  xlab("Gender") +
+  ylab("Count")
+
+# age analysis under Customer
+customer_age = customer %>%
+  filter(member_birth_year > 1950)
+ggplot(customer_age,aes(x=member_birth_year)) +
+  geom_bar()+
+  ggtitle("Age analysis under Customer")+
+  xlab("Member Birth Year")+
+  ylab("Count")
+
+# age analysis under Subscriber
+subscriber_age = subscriber %>%
+  filter(member_birth_year > 1950)
+ggplot(subscriber_age,aes(x=member_birth_year)) +
+  geom_bar() +  
+  ggtitle("Gender analysis under Subscriber")+
+  xlab("Member Birth Year")+
+  ylab("Count")
+
+# user duration analysis under Customer & Subsriber
+duration = data %>%
+  group_by(user_type) %>%
+  mutate(avg_duration = mean(duration_sec)) %>%
+  select(user_type, avg_duration) %>%
+  distinct()
+
+ggplot(duration,aes(x=user_type,y=avg_duration)) +
+  geom_col() +
+  ggtitle("User duration analysis")
+
+
+
+
+
+
 
 
 
